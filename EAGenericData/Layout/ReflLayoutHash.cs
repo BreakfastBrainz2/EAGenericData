@@ -1,0 +1,44 @@
+﻿namespace EAGenericData.Layout
+{
+    public enum ReflLayoutHash : uint
+    {
+        Invalid,
+        Bool,
+        Int8,
+        UInt8,
+        Int16,
+        UInt16,
+        Int32,
+        UInt32,
+        Int64,
+        UInt64,
+        Float,
+        Vector2,
+        Vector3,
+        Vector4,
+        Quaternion,
+        Matrix44,
+        Guid,
+        String,
+        DataRef,
+        Double,
+        QuatPos,
+        Int8Vec16,
+        UInt8Vec16,
+        Int16Vec8,
+        UInt16Vec8,
+        Int32Vec2,
+        Int32Vec3,
+        Int32Vec4,
+        UInt32Vec2,
+        UInt32Vec3,
+        UInt32Vec4,
+        BoolVec2,
+        BoolVec3,
+        BoolVec4,
+        Matrix33,
+        Key,
+        
+        SimpleTypeCount
+    }
+}
