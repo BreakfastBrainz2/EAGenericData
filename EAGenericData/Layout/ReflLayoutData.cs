@@ -55,7 +55,7 @@ namespace EAGenericData.Layout
 
         public void SetValue<T>(int entryId, T value)
         {
-            SetValue(Layout.Entries[entryId], value);
+            SetValue(Layout.Entries[entryId - Layout.MinSlot], value);
         }
 
         internal void CreateDefaultValues()
