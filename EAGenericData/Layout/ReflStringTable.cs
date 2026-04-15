@@ -27,8 +27,9 @@ namespace EAGenericData.Layout
 
         public int Add(string item)
         {
-            int idx = m_table.Count;
+            int idx = GetTableSize();
             m_table.Add(item);
+            m_offsetToString.Add(idx, item);
 
             return idx;
         }
