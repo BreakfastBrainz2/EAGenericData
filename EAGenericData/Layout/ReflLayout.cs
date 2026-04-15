@@ -95,9 +95,12 @@ namespace EAGenericData.Layout
         private static readonly IComparer<FieldEntry> s_sortByAlignAndSize = new SortByAlignmentAndSize();
         private static readonly IComparer<FieldEntry> s_sortById = new SortById();
 
-        public ReflLayout()
+        internal ReflLayout() { }
+
+        public ReflLayout(string name, bool reorder, IList<ReflLayoutField> entries)
         {
-	        
+	        Init(name, entries, reorder, 1, !reorder);
+	        LayoutHash = CalculateHash();
         }
         
         public ReflLayout(string name, int size, int align, ReflLayoutHash layoutHash, IList<ReflLayoutField> entries)
@@ -132,7 +135,7 @@ namespace EAGenericData.Layout
 	        return DataUtil.ArraySize(fieldEntry.ElementSize, fieldEntry.ElementAlign, fieldEntry.Count);
         }
         
-        private ReflLayoutHash CalculateHash()
+        public ReflLayoutHash CalculateHash()
         {
 	        uint result = 0;
 	        foreach (var entry in Entries)

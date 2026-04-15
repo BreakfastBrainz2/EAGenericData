@@ -16,7 +16,6 @@ namespace EAGenericData.Layout
         private const ulong GD_DATA_VTABLE_ID = 0x30E6205;
 
         public Dictionary<string, object> ValueByName = new Dictionary<string, object>();
-        public object[] Values;
         public ReflLayout Layout;
         public long StartOffset;
         public long DataOffset;
@@ -24,12 +23,47 @@ namespace EAGenericData.Layout
 
         internal ReflLayoutData() {}
 
+        internal ReflLayoutData(ReflLayout layout)
+        {
+            Layout = layout;
+        }
+        
         internal ReflLayoutData(ReflLayout layout, long startOffset, ushort dataOffset)
         {
             Layout = layout;
-            Values = new object[layout.ValidEntries.Length];
             StartOffset = startOffset;
             DataOffset = startOffset + dataOffset;
+        }
+
+        public static ReflLayoutData CreateNew(ReflLayout layout)
+        {
+            ReflLayoutData data = new ReflLayoutData(layout);
+            data.CreateDefaultValues();
+
+            return data;
+        }
+
+        public void SetValue<T>(ReflLayout.FieldEntry field, T value)
+        {
+            ValueByName[field.Name] = value;
+        }
+
+        public void SetValue<T>(string fieldName, T value)
+        {
+            ValueByName[fieldName] = value;
+        }
+
+        public void SetValue<T>(int entryId, T value)
+        {
+            SetValue(Layout.Entries[entryId], value);
+        }
+
+        internal void CreateDefaultValues()
+        {
+            foreach(var fld in Layout.ValidEntries)
+            {
+                ValueByName.Add(fld.Name, CreateDefaultValueForField(fld));
+            }
         }
 
         // this needs work, iirc results are not what they should be
@@ -122,7 +156,30 @@ namespace EAGenericData.Layout
                 default: throw new NotImplementedException($"Need to implement {hash}");
             }
         }
-        
+
+        private object CreateDefaultValueForField(ReflLayout.FieldEntry entry)
+        {
+            switch (entry.FieldCategory)
+            {
+                case ReflFieldCategory.Value:
+                {
+                    switch (entry.Layout.LayoutHash)
+                    {
+                        case ReflLayoutHash.String: return string.Empty;
+                    }
+
+                    Type fieldType = ReflLayoutType.GetConcreteType(entry.LayoutHash);
+                    return Activator.CreateInstance(fieldType, true);
+                }
+                case ReflFieldCategory.ListValue:
+                {
+                    Type listType = typeof(List<>).MakeGenericType(ReflLayoutType.GetConcreteType(entry.LayoutHash));
+                    return Activator.CreateInstance(listType);
+                }
+                default: throw new NotImplementedException();
+            }
+        }
+
         #region Loading methods
 
         public static ReflLayoutData Load(GenericDataBlobReader blobReader)
@@ -144,7 +201,6 @@ namespace EAGenericData.Layout
             ReflLayoutData data = new ReflLayoutData();
             blobReader.Register(begin, data);
             
-            data.Values = new object[layout.ValidEntries.Length];
             data.Layout = layout;
             data.StartOffset = begin;
             data.DataOffset = begin + dataOffset;
@@ -169,7 +225,6 @@ namespace EAGenericData.Layout
                     case ReflFieldCategory.Value:
                     {
                         object value = ReadValue(blobReader, entry.Layout.LayoutHash);
-                        Values[entryIt] = value;
                         ValueByName.Add(entry.Name, value);
                         break;
                     }
@@ -183,7 +238,6 @@ namespace EAGenericData.Layout
                             array.SetValue(ReadValue(blobReader, entry.Layout.LayoutHash), i);
                         }
 
-                        Values[entryIt] = array;
                         ValueByName.Add(entry.Name, array);
                         break;
                     }
@@ -202,7 +256,6 @@ namespace EAGenericData.Layout
                             blobReader.Position = info.BeginOffset;
                         }
 
-                        Values[entryIt] = values;
                         ValueByName.Add(entry.Name, values);
                         break;
                     }
@@ -213,7 +266,6 @@ namespace EAGenericData.Layout
                         Debug.Assert(elementType == typeof(ReflLayoutData));
                         ReflLayoutData nested = new ReflLayoutData(entry.Layout, blobReader.Position, 0);
                         nested.LoadData(blobReader);
-                        Values[entryIt] = nested;
                         ValueByName.Add(entry.Name, nested);
                         break;
                     }
@@ -238,7 +290,6 @@ namespace EAGenericData.Layout
                             blobReader.Position = info.BeginOffset;
                         }
 
-                        Values[entryIt] = values;
                         ValueByName.Add(entry.Name, values);
                         break;
                     }
