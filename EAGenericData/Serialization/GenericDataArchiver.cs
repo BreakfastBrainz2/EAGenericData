@@ -1,35 +1,61 @@
-﻿using System;
+﻿using EAGenericData.Frostbite;
+using EAGenericData.IO;
+using EAGenericData.Layout;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization;
-using EAGenericData.Frostbite;
-using EAGenericData.IO;
-using EAGenericData.Layout;
 
 namespace EAGenericData.Serialization
 {
     public static class GenericDataArchiver
     {
         #region Loading methods
-        
-        public static List<ReflLayoutData> LoadStream(Stream stream, bool isFrostbitePackage)
+
+        public static AntAssetBank LoadBank(Stream stream)
         {
             using (ExtendedBinaryReader reader = new ExtendedBinaryReader(stream))
             {
-                if (isFrostbitePackage)
+                AntAssetBank bank = new AntAssetBank();
+
+                AntPackagingType packageType = (AntPackagingType)reader.ReadUInt32(Endian.Big);
+                if (packageType != AntPackagingType.AnimationSet)
                 {
-                    AntPackagingType packageType = (AntPackagingType)reader.ReadUInt32(Endian.Big);
-                    if (packageType != AntPackagingType.AnimationSet)
+                    bank.PackageMeta = LoadPackageMeta(reader);
+                }
+
+                if(bank.PackageMeta.ExtraBytes > 0)
+                {
+                    uint guidIntCount = bank.PackageMeta.StaticGuidToIntSize / 0x14;
+                    for (int i = 0; i < guidIntCount; i++)
                     {
-                        StaticAntPackageMeta meta = LoadPackageMeta(reader);
+                        bank.StaticGuidToKeyMap.Add(reader.ReadGuid(), reader.ReadUInt32());
+                    }
+
+                    for (int i = 0; i < bank.PackageMeta.StaticBundleImportCountInSlots; i++)
+                    {
+                        AntImportNode node = new AntImportNode() { Key = reader.ReadUInt32(), Tid = reader.ReadUInt64() };
+                        bank.ImportNodes.Add(node);
                     }
                 }
-                
-                return LoadStream(reader);
+
+                LoadStream(reader, out List<ReflLayoutData> assets, out ReflLayoutCollection layouts);
+                bank.AssetData = assets;
+                bank.Layouts = layouts;
+
+                return bank;
             }
         }
-    
-        public static List<ReflLayoutData> LoadStream(ExtendedBinaryReader reader)
+
+        public static void LoadStream(Stream stream, out List<ReflLayoutData> assetData, out ReflLayoutCollection layouts)
+        {
+            using (ExtendedBinaryReader reader = new ExtendedBinaryReader(stream))
+            {
+                LoadStream(reader, out assetData, out layouts);
+            }
+        }
+
+        public static void LoadStream(ExtendedBinaryReader reader, out List<ReflLayoutData> assetData, out ReflLayoutCollection layouts)
         {
             GenericDataHeader header = GenericDataHeader.LoadHeader(reader);
             if (header.Format != GenericDataFormat.GD_STRM)
@@ -44,9 +70,10 @@ namespace EAGenericData.Serialization
             if (header.Format != GenericDataFormat.GD_REFL)
                 throw new InvalidDataException($"Expected first blob to be 'REFL', but got {header.Format}");
                 
-            var layouts = LoadREFLBlob(reader, header);
+            layouts = LoadREFLBlob(reader, header);
             
-            List<ReflLayoutData> data = new List<ReflLayoutData>();
+            assetData = new List<ReflLayoutData>();
+
             GenericDataBlobReader blobReader = new GenericDataBlobReader(reader, layouts);
             while (reader.Position < strmEndOffset)
             {
@@ -55,10 +82,8 @@ namespace EAGenericData.Serialization
                     throw new InvalidDataException($"Unsupported blob format: {header.Format}");
 
                 var dataBlob = LoadDATABlob(blobReader, header);
-                data.Add(dataBlob);
+                assetData.Add(dataBlob);
             }
-            
-            return data;
         }
         
         public static ReflLayoutCollection LoadREFLBlob(ExtendedBinaryReader reader, GenericDataHeader reflHeader)
@@ -145,12 +170,6 @@ namespace EAGenericData.Serialization
                 meta.StaticBundleFlatImportCount = reader.ReadUInt32();
                 meta.StaticBundleImportCountInSlots = reader.ReadUInt32();
                 meta.StaticGuidToIntSize = reader.ReadUInt32();
-                
-                // TODO: read guid to int map
-                // TODO: read static import map
-
-                reader.BaseStream.Position = 0x14;
-                reader.BaseStream.Position += meta.MetaBytes;
             }
 
             return meta;
@@ -160,17 +179,61 @@ namespace EAGenericData.Serialization
 
         #region Saving methods
 
+        public static void SaveBank(Stream stream, AntAssetBank bank, Endian endian)
+        {
+            using(ExtendedBinaryWriter writer = new ExtendedBinaryWriter(stream, true))
+            {
+                writer.Endianness = Endian.Big;
+                writer.WriteUInt32((uint)bank.PackageMeta.PackageType);
+                if(bank.PackageMeta.PackageType != AntPackagingType.AnimationSet)
+                {
+                    writer.WriteUInt32(bank.PackageMeta.MetaBytes);
+                    writer.WriteUInt32((uint)bank.PackageMeta.PackageType);
+                    writer.WriteUInt32(bank.PackageMeta.AssetCount);
+                    writer.WriteUInt32(bank.PackageMeta.ImportCount);
+                    writer.WriteUInt32(bank.PackageMeta.AssetBytes);
+                    writer.WriteUInt32(bank.PackageMeta.ExtraBytes);
+
+                    if(bank.PackageMeta.ExtraBytes > 0)
+                    {
+                        writer.WriteUInt32(bank.PackageMeta.TotalNonStaticAssetCount);
+                        writer.WriteUInt32(bank.PackageMeta.MaxNonStaticAssetCount);
+                        writer.WriteUInt32(bank.PackageMeta.MaxNonStaticImportCount);
+                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportBucketSize);
+                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportBucketEntries);
+                        writer.WriteUInt32(bank.PackageMeta.StaticBundleFlatImportCount);
+                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportCountInSlots);
+                        writer.WriteUInt32(bank.PackageMeta.StaticGuidToIntSize);
+
+                        foreach(var kvp in bank.StaticGuidToKeyMap)
+                        {
+                            writer.WriteGuid(kvp.Key);
+                            writer.WriteUInt32(kvp.Value);
+                        }
+
+                        foreach(var import in bank.ImportNodes)
+                        {
+                            writer.WriteUInt32(import.Key);
+                            writer.WriteUInt64(import.Tid);
+                        }
+                    }
+                }
+
+                SaveStream(stream, endian, bank.AssetData, bank.Layouts);
+            }
+        }
+
         public static void SaveStream(Stream stream, Endian endian, List<ReflLayoutData> data, ReflLayoutCollection layouts)
         {
             GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, endian);
             blobWriter.BeginBlob(GenericDataFormat.GD_STRM);
             blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER);
 
-            int biggestBlobSize = SaveREFL(stream, layouts);
+            int biggestBlobSize = SaveREFL(stream, endian, layouts);
 
             foreach (var asset in data)
             {
-                int dataBlobSize = SaveData(stream, asset);
+                int dataBlobSize = SaveData(stream, endian, asset);
                 biggestBlobSize = Math.Max(biggestBlobSize, dataBlobSize);
             }
 
@@ -180,9 +243,9 @@ namespace EAGenericData.Serialization
             blobWriter.EndBlob();
         }
         
-        public static int SaveREFL(Stream stream, ReflLayoutCollection layouts)
+        public static int SaveREFL(Stream stream, Endian endian, ReflLayoutCollection layouts)
         {
-            GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, Endian.Big);
+            GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, endian);
             blobWriter.BeginBlob(GenericDataFormat.GD_REFL);
             blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // reloc table offset
 
@@ -211,9 +274,9 @@ namespace EAGenericData.Serialization
             return blobWriter.EndBlob();
         }
 
-        public static int SaveData(Stream stream, ReflLayoutData data)
+        public static int SaveData(Stream stream, Endian endian, ReflLayoutData data)
         {
-            GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, Endian.Big);
+            GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, endian);
             blobWriter.BeginBlob(GenericDataFormat.GD_DATA);
             blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // reloc table offset
             
@@ -264,7 +327,7 @@ namespace EAGenericData.Serialization
         #endregion
         
         // Verify that serialization works correctly by rewriting all input data
-        internal static void TestSerialization(List<ReflLayoutData> data, ReflLayoutCollection layouts)
+        internal static void TestSerialization(List<ReflLayoutData> data, ReflLayoutCollection layouts, Endian endian)
         {
             DebuggableMemoryStream strm = new DebuggableMemoryStream();
             ReflLayoutCollection layoutTypes = new ReflLayoutCollection();
@@ -278,7 +341,7 @@ namespace EAGenericData.Serialization
                 long blobPos = strm.Position;
                 //try
                 {
-                    SaveData(strm, asset);
+                    SaveData(strm, endian, asset);
                 }// catch (Exception e) {}
                 testBR.Position = blobPos;
                 GenericDataBlobReader testBlobR = new GenericDataBlobReader(testBR, layouts);

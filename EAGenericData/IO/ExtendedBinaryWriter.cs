@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
+using System.Text;
 
 namespace EAGenericData.IO
 {
@@ -17,7 +18,8 @@ namespace EAGenericData.IO
         
         private Stack<long> m_steps = new Stack<long>();
         
-        public ExtendedBinaryWriter(Stream stream) : base(stream)
+        public ExtendedBinaryWriter(Stream stream, bool leaveOpen = false) : 
+            base(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true), leaveOpen)
         {
             
         }
