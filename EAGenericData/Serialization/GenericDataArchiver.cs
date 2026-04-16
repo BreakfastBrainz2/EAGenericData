@@ -230,8 +230,9 @@ namespace EAGenericData.Serialization
             blobWriter.BeginBlob(GenericDataFormat.GD_STRM);
             blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER);
 
-            int biggestBlobSize = SaveREFL(stream, endian, layouts);
+            SaveREFL(stream, endian, layouts);
 
+            int biggestBlobSize = 0;
             foreach (var asset in data)
             {
                 int dataBlobSize = SaveData(stream, endian, asset);
@@ -239,7 +240,9 @@ namespace EAGenericData.Serialization
             }
 
             blobWriter.Position = 0xC;
-            blobWriter.WriteInt32(biggestBlobSize);
+            // not sure why exactly they do this
+            uint strmBiggestBlobSize = (uint)(2 * (5 * biggestBlobSize + 640) / 9u);
+            blobWriter.WriteUInt32(strmBiggestBlobSize);
 
             blobWriter.EndBlob();
         }
