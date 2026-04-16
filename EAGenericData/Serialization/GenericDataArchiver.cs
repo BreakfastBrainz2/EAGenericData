@@ -327,7 +327,7 @@ namespace EAGenericData.Serialization
         #endregion
         
         // Verify that serialization works correctly by rewriting all input data
-        internal static void TestSerialization(List<ReflLayoutData> data, ReflLayoutCollection layouts, Endian endian)
+        public static void TestSerialization(List<ReflLayoutData> data, ReflLayoutCollection layouts, Endian endian)
         {
             DebuggableMemoryStream strm = new DebuggableMemoryStream();
             ReflLayoutCollection layoutTypes = new ReflLayoutCollection();

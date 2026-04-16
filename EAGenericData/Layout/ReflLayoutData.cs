@@ -166,6 +166,7 @@ namespace EAGenericData.Layout
                     switch (entry.Layout.LayoutHash)
                     {
                         case ReflLayoutHash.String: return string.Empty;
+                        case ReflLayoutHash.DataRef: return null;
                     }
 
                     Type fieldType = ReflLayoutType.GetConcreteType(entry.LayoutHash);
@@ -356,14 +357,13 @@ namespace EAGenericData.Layout
 
                 GenericDataWriter gdWriter = new GenericDataWriter(writer, relocTable);
                 SaveData(gdWriter);
-
-                writer.Position = writer.Length;
-                gdWriter.HackyFixLater_WriteAllUnregisteredDataRefs();
             }
         }
         
         private void SaveData(GenericDataWriter writer)
         {
+            var dataRefsToWrite = new List<ReflLayoutData>();
+
             long dataBeginPos = writer.Position;
             foreach (var entry in Layout.ValidEntries)
             {
@@ -375,7 +375,9 @@ namespace EAGenericData.Layout
                     case ReflFieldCategory.Value:
                         if (entry.Layout.LayoutHash == ReflLayoutHash.DataRef)
                         {
-                            writer.WriteDataRefReloc((ReflLayoutData)value);
+                            ReflLayoutData data = (ReflLayoutData)value;
+                            writer.WriteDataRefReloc(data);
+                            dataRefsToWrite.Add(data);
                             break;
                         }
                         WriteValue(writer, entry.Layout.LayoutHash, value);
@@ -439,6 +441,12 @@ namespace EAGenericData.Layout
                         throw new InvalidDataException($"Unimplemented write category {entry.FieldCategory} for field {entry.Name}");
                         break;
                 }
+            }
+
+            foreach(var dataRef in dataRefsToWrite)
+            {
+                if(dataRef != null)
+                    dataRef.Save(writer.BlobWriter, writer.RelocTable);
             }
         }
         

@@ -13,7 +13,8 @@ namespace EAGenericData.Serialization
         private readonly GenericDataBlobWriter m_blobWriter;
         private readonly RelocationTable m_relocTable;
 
-        public RelocationTable TempRelocTable => m_relocTable;
+        public GenericDataBlobWriter BlobWriter => m_blobWriter;
+        public RelocationTable RelocTable => m_relocTable;
 
         public long Position
         {
@@ -137,7 +138,7 @@ namespace EAGenericData.Serialization
             }*/
         }
 
-        public void HackyFixLater_WriteAllUnregisteredDataRefs()
+        /*public void HackyFixLater_WriteAllUnregisteredDataRefs()
         {
             foreach (object obj in m_relocTable.LocalObjects.ToList())
             {
@@ -147,6 +148,6 @@ namespace EAGenericData.Serialization
                     ((ReflLayoutData)obj).Save(m_blobWriter, m_relocTable);
                 }
             }
-        }
+        }*/
     }
 }
