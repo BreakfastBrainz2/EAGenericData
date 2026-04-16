@@ -1,9 +1,9 @@
-﻿using System;
+﻿using EAGenericData.Layout;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
-using EAGenericData.Layout;
 
 namespace EAGenericData
 {
@@ -201,7 +201,28 @@ namespace EAGenericData
 			return result;
 		}
 
-		public static uint Hash(string value, uint result)
+        public static uint Hash(Matrix4x4 value, uint result)
+        {
+            result = Hash(value.M11, result);
+            result = Hash(value.M12, result);
+            result = Hash(value.M13, result);
+            result = Hash(value.M14, result);
+            result = Hash(value.M21, result);
+            result = Hash(value.M22, result);
+            result = Hash(value.M23, result);
+            result = Hash(value.M24, result);
+            result = Hash(value.M31, result);
+            result = Hash(value.M32, result);
+            result = Hash(value.M33, result);
+            result = Hash(value.M34, result);
+            result = Hash(value.M41, result);
+            result = Hash(value.M42, result);
+            result = Hash(value.M43, result);
+            result = Hash(value.M44, result);
+            return result;
+        }
+
+        public static uint Hash(string value, uint result)
 		{
 			if (value != null)
 			{

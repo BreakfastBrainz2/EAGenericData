@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
-using System.Linq;
 using System.Numerics;
 using System.Text;
 using EAGenericData.IO;
@@ -12,9 +10,6 @@ namespace EAGenericData.Serialization
     {
         private readonly GenericDataBlobWriter m_blobWriter;
         private readonly RelocationTable m_relocTable;
-
-        public GenericDataBlobWriter BlobWriter => m_blobWriter;
-        public RelocationTable RelocTable => m_relocTable;
 
         public long Position
         {
@@ -58,6 +53,7 @@ namespace EAGenericData.Serialization
         public void WriteVector3(Vector3 value) => m_blobWriter.WriteVector3(value);
         public void WriteVector4(Vector4 value) => m_blobWriter.WriteVector4(value);
         public void WriteQuaternion(Quaternion value) => m_blobWriter.WriteQuaternion(value);
+        public void WriteMatrix4x4(Matrix4x4 value) => m_blobWriter.WriteMatrix4x4(value);
         public void WriteReloc(Relocation aValue) => m_blobWriter.WriteReloc(aValue);
 
         public void RegisterObject(long offset, object ptr) => m_relocTable.RegisterObject(offset, ptr);
@@ -113,41 +109,17 @@ namespace EAGenericData.Serialization
             m_relocTable.AlignWriter(m_blobWriter, align);
             Length += num;
         }
-        
+
         public void WriteDataRef(ReflLayoutData value)
         {
             long pos = Position;
             WriteReloc(m_relocTable.RelocObject(pos, value));
-            if (value != null && !m_relocTable.IsObjectRegistered(value))
-            {
-                long pos2 = Position;
-                value.Save(m_blobWriter, m_relocTable);
-                Position = pos2;
-            }
-        }
-        
-        public void WriteDataRefReloc(ReflLayoutData value)
-        {
-            long pos = Position;
-            WriteReloc(m_relocTable.RelocObject(pos, value));
-            /*if (value != null && !m_relocTable.IsRegistered(value))
+            /*if (value != null && !m_relocTable.IsObjectRegistered(value))
             {
                 long pos2 = Position;
                 value.Save(m_blobWriter, m_relocTable);
                 Position = pos2;
             }*/
         }
-
-        /*public void HackyFixLater_WriteAllUnregisteredDataRefs()
-        {
-            foreach (object obj in m_relocTable.LocalObjects.ToList())
-            {
-                if (!m_relocTable.IsObjectRegistered(obj))
-                {
-                    Debug.Assert(obj is ReflLayoutData);
-                    ((ReflLayoutData)obj).Save(m_blobWriter, m_relocTable);
-                }
-            }
-        }*/
     }
 }

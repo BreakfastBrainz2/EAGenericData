@@ -28,6 +28,7 @@ namespace EAGenericData.IO
         void WriteVector3(Vector3 value);
         void WriteVector4(Vector4 value);
         void WriteQuaternion(Quaternion value);
+        void WriteMatrix4x4(Matrix4x4 value);
         void WriteReloc(Relocation aValue);
     }
 }

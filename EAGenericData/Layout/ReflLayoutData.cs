@@ -45,7 +45,7 @@ namespace EAGenericData.Layout
 
         public void SetValue<T>(ReflLayout.FieldEntry field, T value)
         {
-            ValueByName[field.Name] = value;
+            ValueByName[field.FixedName] = value;
         }
 
         public void SetValue<T>(string fieldName, T value)
@@ -62,7 +62,7 @@ namespace EAGenericData.Layout
         {
             foreach(var fld in Layout.ValidEntries)
             {
-                ValueByName.Add(fld.Name, CreateDefaultValueForField(fld));
+                ValueByName.Add(fld.FixedName, CreateDefaultValueForField(fld));
             }
         }
 
@@ -76,43 +76,43 @@ namespace EAGenericData.Layout
                 {
                     case ReflFieldCategory.Value:
                     {
-                        hash = HashValue(entry.Layout.LayoutHash, ValueByName[entry.Name], hash);
+                        hash = HashValue(entry.Layout.LayoutHash, ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.Nested:
                     {
-                        ReflLayoutData nested = (ReflLayoutData)ValueByName[entry.Name];
+                        ReflLayoutData nested = (ReflLayoutData)ValueByName[entry.FixedName];
                         hash = (uint)nested.GetHashCode();
                         break;
                     }
                     case ReflFieldCategory.ArrayValue:
                     {
-                        hash = Crc32.HashArray((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashArray((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.ListValue:
                     {
-                        hash = Crc32.HashList((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashList((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.ArrayNested:
                     {
-                        hash = Crc32.HashNestedArray((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashNestedArray((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.ListNested:
                     {
-                        hash = Crc32.HashNestedList((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashNestedList((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.ArrayListValue:
                     {
-                        hash = Crc32.HashArrayList((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashArrayList((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                     case ReflFieldCategory.ArrayListNested:
                     {
-                        hash = Crc32.HashArrayListNested((dynamic)ValueByName[entry.Name], hash);
+                        hash = Crc32.HashArrayListNested((dynamic)ValueByName[entry.FixedName], hash);
                         break;
                     }
                 }
@@ -150,6 +150,7 @@ namespace EAGenericData.Layout
                 case ReflLayoutHash.Vector3: return Crc32.Hash((Vector3)value, result);
                 case ReflLayoutHash.Vector4: return Crc32.Hash((Vector4)value, result);
                 case ReflLayoutHash.Quaternion: return Crc32.Hash((Quaternion)value, result);
+                case ReflLayoutHash.Matrix44: return Crc32.Hash((Matrix4x4)value, result);
                 case ReflLayoutHash.Guid: return Crc32.Hash((Guid)value, result);
                 case ReflLayoutHash.String: return Crc32.Hash((string)value, result);
                 case ReflLayoutHash.DataRef: return Crc32.Hash((ReflLayoutData)value, result);
@@ -226,7 +227,7 @@ namespace EAGenericData.Layout
                     case ReflFieldCategory.Value:
                     {
                         object value = ReadValue(blobReader, entry.Layout.LayoutHash);
-                        ValueByName.Add(entry.Name, value);
+                        ValueByName.Add(entry.FixedName, value);
                         break;
                     }
                     // array of value types
@@ -239,7 +240,7 @@ namespace EAGenericData.Layout
                             array.SetValue(ReadValue(blobReader, entry.Layout.LayoutHash), i);
                         }
 
-                        ValueByName.Add(entry.Name, array);
+                        ValueByName.Add(entry.FixedName, array);
                         break;
                     }
                     // list of value types
@@ -257,7 +258,7 @@ namespace EAGenericData.Layout
                             blobReader.Position = info.BeginOffset;
                         }
 
-                        ValueByName.Add(entry.Name, values);
+                        ValueByName.Add(entry.FixedName, values);
                         break;
                     }
                     // nested structure
@@ -267,7 +268,7 @@ namespace EAGenericData.Layout
                         Debug.Assert(elementType == typeof(ReflLayoutData));
                         ReflLayoutData nested = new ReflLayoutData(entry.Layout, blobReader.Position, 0);
                         nested.LoadData(blobReader);
-                        ValueByName.Add(entry.Name, nested);
+                        ValueByName.Add(entry.FixedName, nested);
                         break;
                     }
                     // list of nested structures
@@ -291,7 +292,7 @@ namespace EAGenericData.Layout
                             blobReader.Position = info.BeginOffset;
                         }
 
-                        ValueByName.Add(entry.Name, values);
+                        ValueByName.Add(entry.FixedName, values);
                         break;
                     }
                     default: throw new InvalidDataException($"Unimplemented category: {entry.FieldCategory}");
@@ -362,24 +363,15 @@ namespace EAGenericData.Layout
         
         private void SaveData(GenericDataWriter writer)
         {
-            var dataRefsToWrite = new List<ReflLayoutData>();
-
             long dataBeginPos = writer.Position;
             foreach (var entry in Layout.ValidEntries)
             {
-                object value = ValueByName[entry.Name];
+                object value = ValueByName[entry.FixedName];
                 writer.Position = dataBeginPos + entry.Offset;
                 //Console.WriteLine($"Writing {entry.Layout.Name} {entry.Name} at 0x{writer.Position:X}");
                 switch (entry.FieldCategory)
                 {
                     case ReflFieldCategory.Value:
-                        if (entry.Layout.LayoutHash == ReflLayoutHash.DataRef)
-                        {
-                            ReflLayoutData data = (ReflLayoutData)value;
-                            writer.WriteDataRefReloc(data);
-                            dataRefsToWrite.Add(data);
-                            break;
-                        }
                         WriteValue(writer, entry.Layout.LayoutHash, value);
                         break;
                     case ReflFieldCategory.ArrayValue:
@@ -442,12 +434,6 @@ namespace EAGenericData.Layout
                         break;
                 }
             }
-
-            foreach(var dataRef in dataRefsToWrite)
-            {
-                if(dataRef != null)
-                    dataRef.Save(writer.BlobWriter, writer.RelocTable);
-            }
         }
         
         public void WriteValue(GenericDataWriter writer, ReflLayoutHash hash, object value)
@@ -471,6 +457,7 @@ namespace EAGenericData.Layout
                 case ReflLayoutHash.Vector3: writer.WriteVector3((Vector3)value); break;
                 case ReflLayoutHash.Vector4: writer.WriteVector4((Vector4)value); break;
                 case ReflLayoutHash.Quaternion: writer.WriteQuaternion((Quaternion)value); break;
+                case ReflLayoutHash.Matrix44: writer.WriteMatrix4x4((Matrix4x4)value); break;
                 case ReflLayoutHash.String: writer.WriteString((string)value); break;
                 case ReflLayoutHash.DataRef: writer.WriteDataRef((ReflLayoutData)value); break;
                 default: throw new NotImplementedException($"Need to implement {hash}");

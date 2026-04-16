@@ -56,6 +56,7 @@ namespace EAGenericData.IO
         }
         public void WriteVector4(Vector4 value) => m_writer.WriteVector4(value);
         public void WriteQuaternion(Quaternion value) => m_writer.WriteQuaternion(value);
+        public void WriteMatrix4x4(Matrix4x4 value) => m_writer.WriteMatrix4x4(value);
         public void WriteReloc(Relocation value) => WriteInt64(value.Offset);
         
         private readonly Stream m_stream;

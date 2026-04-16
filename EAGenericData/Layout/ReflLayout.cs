@@ -20,6 +20,7 @@ namespace EAGenericData.Layout
             public ReflLayoutFlags Flags;
             public ReflFieldCategory FieldCategory;
             public string Name;
+			public string FixedName;
             public ReflLayoutHash LayoutHash;
             public int NameHash;
             public int RunLengthEncoding;
@@ -77,6 +78,7 @@ namespace EAGenericData.Layout
         #endregion
         
         public string Name { get; private set; }
+		public string FixedName { get; private set; }
         public int MinSlot { get; private set; }
         public int MaxSlot { get; private set; }
         public int DataSize { get; private set; }
@@ -386,10 +388,12 @@ namespace EAGenericData.Layout
             foreach (var entry in Entries)
             {
 	            entry.Name = StringTable.GetByOffset(entry.NameIdx);
+				entry.FixedName = FixupEntryName(entry);
 	            entry.NameHash = entry.Name.GetHashCode();
             }
             
             Name = StringTable.GetByIndex(1);
+			FixedName = FixupName();
 
             CollectValidEntries();
             reader.BaseStream.Position = beginOffset + stringTableOffset + stringTableSize;
@@ -476,6 +480,16 @@ namespace EAGenericData.Layout
 	        }
 	        
 	        return Name.Replace(":", "_").Replace(" ", "_");
+        }
+
+		private string FixupEntryName(FieldEntry entry)
+		{
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                return $"__UnnamedField{entry.FieldId}";
+            }
+
+            return entry.Name.Replace(":", "_").Replace(" ", "_");
         }
 
         public string DumpInfo()

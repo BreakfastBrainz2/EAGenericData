@@ -75,10 +75,18 @@ namespace EAGenericData.Serialization
 		
 		public void WriteRelocTable(IDataWriter writer)
 		{
-			if (m_localObjects.Count > 0)
+            AlignWriter(writer, 4);
+            long relocTableOffset = writer.Position;
+            writer.Position = 0xC;
+            writer.WriteUInt32((uint)relocTableOffset);
+            writer.Position = relocTableOffset;
+
+            int count = m_localObjects.Count > 0 ? m_localObjects.Count : m_localPtrs.Count;
+            writer.WriteUInt32((uint)count);
+
+            if (m_localObjects.Count > 0)
 			{
 				Debug.Assert(m_localPtrs.Count == 0);
-				writer.WriteUInt32((uint)m_localObjects.Count);
 				foreach (var kvp in m_localObjects)
 				{
 					writer.WriteUInt32((uint)(kvp.Key - m_startOffset));
@@ -88,7 +96,6 @@ namespace EAGenericData.Serialization
 			if (m_localPtrs.Count > 0)
 			{
 				Debug.Assert(m_localObjects.Count == 0);
-				writer.WriteUInt32((uint)m_localPtrs.Count);
 				foreach (var kvp in m_localPtrs)
 				{
 					writer.WriteUInt32((uint)(kvp.Key - m_startOffset));

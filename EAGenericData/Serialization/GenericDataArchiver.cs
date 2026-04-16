@@ -2,6 +2,7 @@
 using EAGenericData.IO;
 using EAGenericData.Layout;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization;
@@ -262,12 +263,6 @@ namespace EAGenericData.Serialization
             {
                 lyt.Value.Save(blobWriter, relocTable);
             }
-
-            relocTable.AlignWriter(blobWriter, 4);
-            long relocTableOffset = blobWriter.Position;
-            blobWriter.Position = 0xC;
-            blobWriter.WriteUInt32((uint)relocTableOffset);
-            blobWriter.Position = relocTableOffset;
             
             relocTable.WriteRelocTable(blobWriter);
             
@@ -278,22 +273,105 @@ namespace EAGenericData.Serialization
         {
             GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, endian);
             blobWriter.BeginBlob(GenericDataFormat.GD_DATA);
-            blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // reloc table offset
-            
-            RelocationTable relocTable = new RelocationTable(blobWriter.Position);
-            
-            data.Save(blobWriter, relocTable);
-            blobWriter.Position = blobWriter.Length;
-            
-            relocTable.AlignWriter(blobWriter, 4);
-            long relocTableOffset = blobWriter.Position;
-            blobWriter.Position = 0xC;
-            blobWriter.WriteUInt32((uint)relocTableOffset);
-            blobWriter.Position = relocTableOffset;
-            
-            relocTable.WriteRelocTable(blobWriter);
+
+            List<ReflLayoutData> dataSet = new List<ReflLayoutData>();
+            GatherData(data, dataSet);
+
+            if(dataSet.Count > 0)
+            {
+                blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // reloc table offset
+
+                RelocationTable relocTable = new RelocationTable(blobWriter.Position);
+
+                foreach(var dat in dataSet)
+                {
+                    dat.Save(blobWriter, relocTable);
+                }
+                blobWriter.Position = blobWriter.Length;
+
+                relocTable.WriteRelocTable(blobWriter);
+            }
             
             return blobWriter.EndBlob();
+        }
+
+        public static void GatherData(ReflLayoutData data, List<ReflLayoutData> dataSet)
+        {
+            if (data != null && !dataSet.Contains(data))
+            {
+                dataSet.Add(data);
+
+                foreach (var entry in data.Layout.Entries)
+                {
+                    if (entry.FieldCategory != ReflFieldCategory.Invalid)
+                        GatherData(entry, data.ValueByName[entry.FixedName], dataSet);
+                }
+            }
+        }
+
+        public static void GatherData(ReflLayout.FieldEntry entry, object value, List<ReflLayoutData> dataSet)
+        {
+            if (entry.LayoutHash == ReflLayoutHash.Invalid)
+                return;
+
+            if (entry.FieldCategory == ReflFieldCategory.Nested ||
+                entry.FieldCategory == ReflFieldCategory.ListNested)
+                return;
+
+            bool isArray = (entry.Flags & ReflLayoutFlags.Array) != 0;
+            int count = entry.Count;
+
+            if (count == 1 && isArray)
+            {
+                count = value is IList list
+                    ? list.Count
+                    : ((Array)value).Length;
+            }
+
+            ReflLayoutHash entryHash = entry.Layout.LayoutHash;
+            bool isNested = entryHash > ReflLayoutHash.Key;
+            bool isDataRef = entryHash == ReflLayoutHash.DataRef;
+
+            if (count > 1 && !isArray)
+            {
+                if (isNested || isDataRef)
+                {
+                    throw new NotImplementedException();
+
+                    //foreach (var entry in entry.Layout.Entries)
+                }
+
+                return;
+            }
+
+            if (isArray)
+            {
+                if (isNested || isDataRef)
+                {
+                    if (value is IEnumerable enumerable)
+                    {
+                        foreach (object element in enumerable)
+                        {
+                            if (element is ReflLayoutData data)
+                                GatherData(data, dataSet);
+                        }
+                    }
+                }
+
+                return;
+            }
+
+            if (isDataRef)
+            {
+                GatherData(value as ReflLayoutData, dataSet);
+                return;
+            }
+
+            if (isNested)
+            {
+                throw new NotImplementedException();
+                //foreach (var entry in entry.Layout.Entries)
+            }
         }
 
         public static void CollectLayoutTypes(ReflLayout layout, ReflLayoutCollection reflLayouts)
@@ -315,7 +393,7 @@ namespace EAGenericData.Serialization
             {
                 if (entry.Layout == ReflLayoutType.DataRef && entry.FieldCategory == ReflFieldCategory.Value)
                 {
-                    CollectLayoutTypes((ReflLayoutData)data.ValueByName[entry.Name], reflLayouts);
+                    CollectLayoutTypes((ReflLayoutData)data.ValueByName[entry.FixedName], reflLayouts);
                 }
                 else if (entry.Layout == ReflLayoutType.DataRef || !entry.Layout.IsNativeType)
                 {
@@ -334,7 +412,7 @@ namespace EAGenericData.Serialization
             ExtendedBinaryReader testBR = new ExtendedBinaryReader(strm);
             
             GenericDataHeader header;
-            for (int i = 0; i < data.Count; i++)
+            for (int i = 21010; i < data.Count; i++)
             {
                 ReflLayoutData asset = data[i];
                 CollectLayoutTypes(asset, layoutTypes);

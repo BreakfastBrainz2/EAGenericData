@@ -173,5 +173,25 @@ namespace EAGenericData.IO
             WriteFloat(value.Z);
             WriteFloat(value.W);
         }
+
+        public void WriteMatrix4x4(Matrix4x4 value)
+        {
+            WriteFloat(value.M11);
+            WriteFloat(value.M12);
+            WriteFloat(value.M13);
+            WriteFloat(value.M14);
+            WriteFloat(value.M21);
+            WriteFloat(value.M22);
+            WriteFloat(value.M23);
+            WriteFloat(value.M24);
+            WriteFloat(value.M31);
+            WriteFloat(value.M32);
+            WriteFloat(value.M33);
+            WriteFloat(value.M34);
+            WriteFloat(value.M41);
+            WriteFloat(value.M42);
+            WriteFloat(value.M43);
+            WriteFloat(value.M44);
+        }
     }
 }
