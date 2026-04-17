@@ -85,5 +85,7 @@ namespace EAGenericData.Frostbite
         public List<ReflLayoutData> AssetData { get; set; } = new List<ReflLayoutData>();
         public Dictionary<Guid, uint> StaticGuidToKeyMap = new Dictionary<Guid, uint>();
         public List<AntImportNode> ImportNodes = new List<AntImportNode>();
+
+        public Dictionary<Guid, ReflLayoutData> GuidToAssetMap = new Dictionary<Guid, ReflLayoutData>();
     }
 }

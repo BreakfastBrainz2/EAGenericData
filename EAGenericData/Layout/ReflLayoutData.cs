@@ -58,6 +58,11 @@ namespace EAGenericData.Layout
             SetValue(Layout.Entries[entryId - Layout.MinSlot], value);
         }
 
+        public T GetValue<T>(int entryId)
+        {
+            return (T)ValueByName[Layout.Entries[entryId - Layout.MinSlot].FixedName];
+        }
+
         internal void CreateDefaultValues()
         {
             foreach(var fld in Layout.ValidEntries)

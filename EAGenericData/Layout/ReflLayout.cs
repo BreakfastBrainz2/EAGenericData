@@ -263,6 +263,7 @@ namespace EAGenericData.Layout
 		            {
 		                entry.NameIdx = (short)StringTable.Add(entryName);
 		                entry.Name = entryName;
+		                entry.FixedName = FixupEntryName(entry);
 		                entry.NameHash = entryName.GetHashCode();
 		            }
 		        }

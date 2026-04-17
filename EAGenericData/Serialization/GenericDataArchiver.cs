@@ -44,6 +44,12 @@ namespace EAGenericData.Serialization
                 bank.AssetData = assets;
                 bank.Layouts = layouts;
 
+                bank.GuidToAssetMap = new Dictionary<Guid, ReflLayoutData>(assets.Count);
+                foreach (var asset in assets)
+                {
+                    bank.GuidToAssetMap.Add(asset.GetValue<Guid>(-3), asset);
+                }
+
                 return bank;
             }
         }
