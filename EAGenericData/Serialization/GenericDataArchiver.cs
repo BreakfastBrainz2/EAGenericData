@@ -5,6 +5,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 
 namespace EAGenericData.Serialization
@@ -185,6 +186,37 @@ namespace EAGenericData.Serialization
         #endregion
 
         #region Saving methods
+        
+        private static void PackImportsIntoBuckets(List<AntImportNode> nodes, int bucketSize)
+        {
+            int bucketCount = (nodes.Count + bucketSize - 1) / bucketSize;
+
+            for (int bucketIdx = 0; bucketIdx < bucketCount; bucketIdx++)
+            {
+                int startIdx = bucketIdx * bucketSize;
+                int endIdx = Math.Min(startIdx + bucketSize, nodes.Count);
+
+                int writeIdx = startIdx;
+                
+                for (int i = startIdx; i < endIdx; i++)
+                {
+                    if (nodes[i].Key != uint.MaxValue)
+                    {
+                        if (writeIdx != i)
+                        {
+                            (nodes[writeIdx], nodes[i]) = (nodes[i], nodes[writeIdx]);
+                        }
+                        writeIdx++;
+                    }
+                }
+                
+                // fill any remaining slots with null imports
+                for (int i = writeIdx; i < endIdx; i++)
+                {
+                    nodes[i] = new AntImportNode { Key = uint.MaxValue, Tid = ulong.MaxValue };
+                }
+            }
+        }
 
         public static void SaveBank(Stream stream, AntAssetBank bank, Endian endian)
         {
@@ -192,45 +224,75 @@ namespace EAGenericData.Serialization
             {
                 writer.Endianness = Endian.Big;
                 writer.WriteUInt32((uint)bank.PackageMeta.PackageType);
+
+                long bankMetaStartPos = writer.Position;
                 if(bank.PackageMeta.PackageType != AntPackagingType.AnimationSet)
                 {
-                    writer.WriteUInt32(bank.PackageMeta.MetaBytes);
+                    bool isStatic = bank.PackageMeta.PackageType == AntPackagingType.Static;
+                    
+                    writer.WriteUInt32(isStatic ? 0xDEADBEEF : 0x18); // MetaBytes (total size of this header)
                     writer.WriteUInt32((uint)bank.PackageMeta.PackageType);
-                    writer.WriteUInt32(bank.PackageMeta.AssetCount);
-                    writer.WriteUInt32(bank.PackageMeta.ImportCount);
-                    writer.WriteUInt32(bank.PackageMeta.AssetBytes);
-                    writer.WriteUInt32(bank.PackageMeta.ExtraBytes);
+                    uint assetCount = isStatic ? (uint)bank.AssetData.Count + 1 : (uint)bank.AssetData.Count;
+                    
+                    writer.WriteUInt32(assetCount);
+                    writer.WriteUInt32(bank.PackageMeta.ImportCount); // no idea how this is calculated
+                    writer.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // AssetBytes
+                    writer.WriteUInt32(isStatic ? sizeof(uint) * 8u : 0);
 
-                    if(bank.PackageMeta.ExtraBytes > 0)
+                    if (isStatic)
                     {
-                        writer.WriteUInt32(bank.PackageMeta.TotalNonStaticAssetCount);
+                        uint validImportCount = (uint)bank.ImportNodes.Count(x => x.Key != uint.MaxValue);
+                        uint lastImportId = bank.ImportNodes.Last(x => x.Key != uint.MaxValue).Key;
+                        const int bucketSize = 64; // is this always 64?
+                        uint bucketEntries = Math.Min(validImportCount, bucketSize);
+                        //Debug.Assert(bank.PackageMeta.TotalNonStaticAssetCount == lastImportId + 1);
+                        //Debug.Assert(bank.PackageMeta.StaticBundleFlatImportCount == validImportCount);
+                        //Debug.Assert(bank.PackageMeta.StaticBundleImportBucketSize == 64);
+                        //Debug.Assert(bank.PackageMeta.StaticBundleImportBucketEntries == bucketEntries);
+                        
+                        writer.WriteUInt32(lastImportId + 1);
+                        // not sure how exactly these are calculated. for coop_coastal's root bank, the count is 1841
+                        // which matches up with the amount of assets in gamelogic_shared's bank.
+                        // but the bank also imports assets from 2 other banks, so does this only account for the first imported bank?
                         writer.WriteUInt32(bank.PackageMeta.MaxNonStaticAssetCount);
                         writer.WriteUInt32(bank.PackageMeta.MaxNonStaticImportCount);
-                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportBucketSize);
-                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportBucketEntries);
-                        writer.WriteUInt32(bank.PackageMeta.StaticBundleFlatImportCount);
-                        writer.WriteUInt32(bank.PackageMeta.StaticBundleImportCountInSlots);
-                        writer.WriteUInt32(bank.PackageMeta.StaticGuidToIntSize);
-
+                        writer.WriteUInt32(bucketSize);
+                        writer.WriteUInt32(bucketEntries);
+                        writer.WriteUInt32(validImportCount);
+                        writer.WriteUInt32((uint)bank.ImportNodes.Count);
+                        writer.WriteUInt32((uint)(0x14 * bank.StaticGuidToKeyMap.Count));
+                        
                         foreach(var kvp in bank.StaticGuidToKeyMap)
                         {
                             writer.WriteGuid(kvp.Key);
                             writer.WriteUInt32(kvp.Value);
                         }
-
+                        PackImportsIntoBuckets(bank.ImportNodes, bucketSize);
                         foreach(var import in bank.ImportNodes)
                         {
                             writer.WriteUInt32(import.Key);
                             writer.WriteUInt64(import.Tid);
                         }
+
+                        long bankMetaEndPos = writer.Position;
+                        long metaBytes = bankMetaEndPos - bankMetaStartPos;
+
+                        writer.Position = bankMetaStartPos;
+                        writer.WriteUInt32((uint)metaBytes);
+                        writer.Position = bankMetaEndPos;
                     }
                 }
 
-                SaveStream(stream, endian, bank.AssetData, bank.Layouts);
+                SaveStream(stream, endian, bank.AssetData, bank.Layouts, out int totalDataSize);
+
+                long endPos = writer.Position;
+                writer.Position = bankMetaStartPos + 0x10;
+                writer.WriteUInt32((uint)totalDataSize);
+                writer.Position = endPos;
             }
         }
 
-        public static void SaveStream(Stream stream, Endian endian, List<ReflLayoutData> data, ReflLayoutCollection layouts)
+        public static void SaveStream(Stream stream, Endian endian, List<ReflLayoutData> data, ReflLayoutCollection layouts, out int totalDataSize)
         {
             GenericDataBlobWriter blobWriter = new GenericDataBlobWriter(stream, endian);
             blobWriter.BeginBlob(GenericDataFormat.GD_STRM);
@@ -239,9 +301,12 @@ namespace EAGenericData.Serialization
             SaveREFL(stream, endian, layouts);
 
             int biggestBlobSize = 0;
+            totalDataSize = 0;
             foreach (var asset in data)
             {
                 int dataBlobSize = SaveData(stream, endian, asset);
+                // not fully correct, but decently close
+                totalDataSize += (dataBlobSize - DataUtil.Align(asset.Layout.DataSize, asset.Layout.Alignment));
                 biggestBlobSize = Math.Max(biggestBlobSize, dataBlobSize);
             }
 
@@ -285,7 +350,6 @@ namespace EAGenericData.Serialization
 
             List<ReflLayoutData> dataSet = new List<ReflLayoutData>();
             GatherData(data, dataSet);
-
             if(dataSet.Count > 0)
             {
                 blobWriter.WriteUInt32(DataUtil.PTR_PLACEHOLDER); // reloc table offset
