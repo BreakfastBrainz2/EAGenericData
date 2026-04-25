@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net481</TargetFramework>
+        <TargetFramework>netstandard2.1</TargetFramework>
         <RootNamespace>EAGenericData</RootNamespace>
         <LangVersion>7.3</LangVersion>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -13,6 +13,7 @@
 
     <ItemGroup>
       <PackageReference Include="AssimpNetter" Version="6.0.4" />
+      <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     </ItemGroup>
 
 </Project>

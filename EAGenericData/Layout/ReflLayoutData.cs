@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using EAGenericData.IO;
 using EAGenericData.Serialization;
@@ -50,6 +51,9 @@ namespace EAGenericData.Layout
 
         public void SetValue<T>(string fieldName, T value)
         {
+            if (Layout.ValidEntries.All(x => x.Name != fieldName))
+                throw new InvalidDataException($"Field {fieldName} does not exist");
+            
             ValueByName[fieldName] = value;
         }
 
@@ -257,8 +261,10 @@ namespace EAGenericData.Layout
                     case ReflFieldCategory.ListValue:
                     {
                         Type elementType = ReflLayoutType.GetConcreteType(entry.Layout.LayoutHash);
-                        var values = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType));
-                        if (blobReader.BeginArrayRead(out ArrayInfo info))
+                        bool hasArray = blobReader.BeginArrayRead(out ArrayInfo info);
+                        
+                        var values = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType), args: info.Count);
+                        if (hasArray)
                         {
                             for (int i = 0; i < info.Count; i++)
                             {
@@ -279,6 +285,26 @@ namespace EAGenericData.Layout
                         ReflLayoutData nested = new ReflLayoutData(entry.Layout, blobReader.Position, 0);
                         nested.LoadData(blobReader);
                         ValueByName.Add(entry.FixedName, nested);
+                        break;
+                    }
+                    // array of nested structures
+                    case ReflFieldCategory.ArrayNested:
+                    {
+                        Type elementType = ReflLayoutType.GetConcreteType(entry.Layout.LayoutHash);
+                        Debug.Assert(elementType == typeof(ReflLayoutData));
+                        Array array = Array.CreateInstance(elementType, entry.Count);
+                        
+                        int align = DataUtil.Align(entry.Layout.DataSize, entry.Layout.Alignment);
+                        long pos = blobReader.Position;
+                        for (int i = 0; i < entry.Count; i++)
+                        {
+                            blobReader.Position = pos + align * i;
+                            ReflLayoutData nested = new ReflLayoutData(entry.Layout, blobReader.Position, 0);
+                            nested.LoadData(blobReader);
+                            array.SetValue(nested, i);
+                        }
+
+                        ValueByName.Add(entry.FixedName, array);
                         break;
                     }
                     // list of nested structures

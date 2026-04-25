@@ -1,6 +1,8 @@
 ﻿using EAGenericData.Layout;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 namespace EAGenericData.Frostbite
 {
@@ -87,5 +89,44 @@ namespace EAGenericData.Frostbite
         public List<AntImportNode> ImportNodes = new List<AntImportNode>();
 
         public Dictionary<Guid, ReflLayoutData> GuidToAssetMap = new Dictionary<Guid, ReflLayoutData>();
+        
+        public ReflLayoutData CreateAssetOfType(string typeName, string name)
+        {
+            var layout = Layouts.FirstOrDefault(x => x.Value.Name == typeName);
+
+            return CreateAssetOfType(layout.Key, name);
+        }
+        
+        public ReflLayoutData CreateDataOfType(string typeName)
+        {
+            var layout = Layouts.FirstOrDefault(x => x.Value.Name == typeName);
+
+            return CreateDataOfType(layout.Key);
+        }
+
+        public ReflLayoutData CreateAssetOfType(ReflLayoutHash hash, string name)
+        {
+            if (!Layouts.TryGetValue(hash, out var layout))
+                throw new InvalidDataException($"No type for {hash} exists in this bank");
+            
+            ReflLayoutData asset = ReflLayoutData.CreateNew(layout);
+
+            AssetKey newKey = new AssetKey((uint)AssetData.Count + 2, PackageMeta.PackageType == AntPackagingType.Static);
+            asset.SetValue("__guid", newKey.ToGuid());
+            asset.SetValue("__name", name);
+            
+            AssetData.Add(asset);
+
+            return asset;
+        }
+        
+        public ReflLayoutData CreateDataOfType(ReflLayoutHash hash)
+        {
+            if (!Layouts.TryGetValue(hash, out var layout))
+                throw new InvalidDataException($"No type for {hash} exists in this bank");
+            
+            ReflLayoutData asset = ReflLayoutData.CreateNew(layout);
+            return asset;
+        }
     }
 }

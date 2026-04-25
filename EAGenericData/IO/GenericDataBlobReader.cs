@@ -109,7 +109,6 @@ namespace EAGenericData.IO
         public ReflLayoutData ReadGDDataRef()
         {
             long offset = ReadInt64();
-            Debug.Assert(offset >= 0 && offset <= 1000000);
             if (offset != 0)
             {
                 long actualOffset = offset + DataBlobStartOffset;
